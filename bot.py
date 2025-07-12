@@ -8,8 +8,8 @@ BASE_URL   = "https://www.steelorbis.com"
 NEWS_LIST  = f"{BASE_URL}/steel-news/latest-news/"
 INTERVAL   = 30     # seconds between polls
 
-BOT_TOKEN  = os.getenv("BOT_TOKEN")
-CHAT_ID    = os.getenv("CHAT_ID")
+BOT_TOKEN  = os.getenv("8195580337:AAFn5U1KCk4chufiqK3Ikqed2SS96nCEh5g")
+CHAT_ID    = os.getenv("94887185")
 
 headers = {
     "User-Agent": (
