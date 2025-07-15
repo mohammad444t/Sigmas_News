@@ -3,7 +3,6 @@
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 # 1) نصب کتابخانه
-!pip install python-telegram-bot==13.15 --quiet
 
 # 2) کُد ربات
 import json, os, random, threading, time
