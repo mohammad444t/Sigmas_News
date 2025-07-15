@@ -3,8 +3,8 @@ from typing import Set
 from telegram import Update, ReplyKeyboardMarkup, ParseMode
 from telegram.ext import Updater, CommandHandler, CallbackContext
 
-TOKEN      = os.getenv("BOT_TOKEN")           # از محیط می‌خوانیم
-APP_URL    = os.getenv("APP_URL")             # مثل https://sigma-bot.up.railway.app
+TOKEN      = os.getenv("8195580337:AAFn5U1KCk4chufiqK3Ikqed2SS96nCEh5g")           # از محیط می‌خوانیم
+APP_URL    = os.getenv("https://web-production-4db11.up.railway.app")             # مثل https://sigma-bot.up.railway.app
 DATA_FILE  = "subscribers.json"
 
 class SigmasNewsBot:
