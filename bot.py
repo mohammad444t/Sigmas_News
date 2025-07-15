@@ -1,72 +1,79 @@
-import os, time, sys
-from urllib.parse import urljoin
+import json, os, random, time, threading
+from typing import Set
+from telegram import Update, ReplyKeyboardMarkup, ParseMode
+from telegram.ext import Updater, CommandHandler, CallbackContext
 
-import requests
-from bs4 import BeautifulSoup
+TOKEN      = os.getenv("BOT_TOKEN")           # از محیط می‌خوانیم
+APP_URL    = os.getenv("APP_URL")             # مثل https://sigma-bot.up.railway.app
+DATA_FILE  = "subscribers.json"
 
-BASE_URL   = "https://www.steelorbis.com"
-NEWS_LIST  = f"{BASE_URL}/steel-news/latest-news/"
-INTERVAL   = 30     # seconds between polls
+class SigmasNewsBot:
+    def __init__(self):
+        self.subscribers: Set[int] = self._load()
+        self.updater = Updater(token=TOKEN, use_context=True)
+        dp = self.updater.dispatcher
+        dp.add_handler(CommandHandler("start", self._start))
+        dp.add_handler(CommandHandler("subscribe", self._sub))
+        dp.add_handler(CommandHandler("unsubscribe", self._unsub))
 
-BOT_TOKEN  = os.getenv("8195580337:AAFn5U1KCk4chufiqK3Ikqed2SS96nCEh5g")
-CHAT_ID    = os.getenv("94887185")
-
-headers = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36"
-    )
-}
-
-TG_URL = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-
-def tg_send(text):
-    resp = requests.post(TG_URL, data={
-        "chat_id": CHAT_ID,
-        "text": text,
-        "disable_web_page_preview": True
-    }, timeout=10)
-    resp.raise_for_status()
-
-def get_latest_article_url():
-    r = requests.get(NEWS_LIST, headers=headers, timeout=15)
-    r.raise_for_status()
-    soup = BeautifulSoup(r.text, "lxml")
-    link = soup.select_one("a:has(.article-shell)")
-    if not link:
-        return None
-    return urljoin(BASE_URL, link["href"])
-
-def fetch_article(url):
-    r = requests.get(url, headers=headers, timeout=15)
-    r.raise_for_status()
-    soup = BeautifulSoup(r.text, "lxml")
-    headline = soup.select_one("h1.home-h1").get_text(strip=True)
-    body_div = soup.select_one("#contentDiv")
-    for a in body_div.find_all("a"):
-        a.unwrap()
-    body = body_div.get_text("\n", strip=True)
-    return f"{headline}\n\n{body}"
-
-def main():
-    if not BOT_TOKEN or not CHAT_ID:
-        sys.exit("BOT_TOKEN / CHAT_ID env vars missing")
-
-    last_url = None
-    tg_send("🤖 SteelOrbis bot started. Polling every 30 s.")
-
-    while True:
+    # ---------- JSON ----------
+    def _load(self):
         try:
-            url = get_latest_article_url()
-            if url and url != last_url:
-                last_url = url
-                tg_send("🆕  New article detected.\nFetching…")
-                tg_send(fetch_article(url))
-            else:
-                print("No new news")
-        except Exception as e:
-            print("Error:", e)
-        time.sleep(INTERVAL)
+            with open(DATA_FILE, "r", encoding="utf-8") as f:
+                return set(json.load(f))
+        except: return set()
+    def _save(self):
+        with open(DATA_FILE, "w", encoding="utf-8") as f:
+            json.dump(list(self.subscribers), f, ensure_ascii=False)
+
+    # ---------- Handlers ----------
+    def _start(self, upd: Update, _: CallbackContext):
+        txt=("به ربات تلگرام اخبار سیگماس خوش آمدید، جهت مشترک شدن، "
+             "از فرمان /subscribe استفاده کنید ...")
+        kbd=[["/subscribe","/unsubscribe"]]
+        upd.message.reply_text(txt, reply_markup=ReplyKeyboardMarkup(kbd, resize_keyboard=True))
+    def _sub(self, upd: Update, _: CallbackContext):
+        uid=upd.effective_user.id
+        if uid in self.subscribers:
+            upd.message.reply_text("شما قبلا مشترک شده اید ❗️"); return
+        self.subscribers.add(uid); self._save()
+        upd.message.reply_text("✅ شما با موفقیت مشترک شدید.")
+    def _unsub(self, upd: Update, _: CallbackContext):
+        uid=upd.effective_user.id
+        if uid not in self.subscribers:
+            upd.message.reply_text("شما مشترک نیستید ❗️"); return
+        self.subscribers.remove(uid); self._save()
+        upd.message.reply_text("❌ اشتراک شما لغو شد.")
+
+    # ---------- ارسال بیرونی ----------
+    def send(self, text: str, mode=ParseMode.HTML):
+        for uid in list(self.subscribers):
+            try: self.updater.bot.send_message(uid, text, parse_mode=mode)
+            except: pass
+
+    # ---------- Webhook ----------
+    def run_webhook(self):
+        port = int(os.getenv("PORT", 8080))
+        self.updater.start_webhook(
+            listen="0.0.0.0", port=port, url_path=TOKEN
+        )
+        self.updater.bot.setWebhook(f"{APP_URL}/{TOKEN}")
+        print("Webhook set -->", APP_URL)
+        self.updater.idle()
+
+bot = SigmasNewsBot()
+
+# خبر تصادفی هر 30 ثانیه (می‌توانید حذف کنید)
+def ticker():
+    titles=["خبر فوری","گزارش مالی","محصول جدید","آپدیت نرم‌افزار"]
+    bodies=["جزئیات به زودی اعلام می‌شود.","فروش رشد چشمگیری داشت.","تجربه کاربری بهتر شد."]
+    while True:
+        if bot.subscribers:
+            import random
+            txt=f"<b>{random.choice(titles)}</b>\n\n{random.choice(bodies)}"
+            bot.send(txt)
+        time.sleep(30)
+threading.Thread(target=ticker, daemon=True).start()
 
 if __name__ == "__main__":
-    main()
+    bot.run_webhook()
