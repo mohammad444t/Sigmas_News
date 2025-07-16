@@ -188,17 +188,6 @@ SteelOrbisWatcher  – resilient version
 • On network / HTTP error → (False, "", "") and a console notice.
 """
 
-from __future__ import annotations
-
-import json
-from pathlib import Path
-from typing import Tuple, Optional, Dict
-from urllib.parse import urljoin
-
-import requests
-from bs4 import BeautifulSoup
-
-
 class SteelOrbisWatcher:
     # ───────────────────── class-level constants ───────────────────── #
     BASE_URL  = "https://www.steelorbis.com"
