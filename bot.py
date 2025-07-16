@@ -12,6 +12,7 @@ from typing import Tuple, Optional
 from urllib.parse import urljoin
 import requests
 from bs4 import BeautifulSoup
+import lxml
 
 # ───── توکن رباتت را این‌جا بگذار ─────
 TOKEN = "8195580337:AAFn5U1KCk4chufiqK3Ikqed2SS96nCEh5g"
