@@ -181,37 +181,22 @@ class SigmasNewsBot:
         self.updater.idle()
 
 
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
 """
-SteelOrbisWatcher  – stateless, call-on-demand scraper
-=====================================================
-
-• Call .poll() whenever you like (cron, schedule, Celery, …).
-• .poll() now returns a **triple** → (is_new, title, body)
-      is_new  : bool   – True  → a fresh article was processed
-                          False → nothing new
-      title   : str    – headline text  (empty when is_new is False)
-      body    : str    – cleaned article text (empty when is_new is False)
-• Still persists the last seen URL and offers .get_last_article().
-
-Example
--------
-from steelorbis_watcher import SteelOrbisWatcher
-import time
-
-w = SteelOrbisWatcher()
-
-while True:
-    is_new, title, body = w.poll()
-    if is_new:
-        # do something with title/body
-        pass
-    time.sleep(60)
+SteelOrbisWatcher  – resilient version
+--------------------------------------
+.poll()           → (is_new, title, body)
+• On network / HTTP error → (False, "", "") and a console notice.
 """
 
+from __future__ import annotations
 
+import json
+from pathlib import Path
+from typing import Tuple, Optional, Dict
+from urllib.parse import urljoin
+
+import requests
+from bs4 import BeautifulSoup
 
 
 class SteelOrbisWatcher:
@@ -228,12 +213,9 @@ class SteelOrbisWatcher:
 
     # ───────────────────────── constructor ────────────────────────── #
     def __init__(self, state_file: str | Path = "state.json") -> None:
-        """
-        state_file – JSON file used to remember the last processed URL.
-        """
         self.state_file    = Path(state_file)
         self._last_url     = self._load_last_url()
-        self._last_article: Dict[str, str] = {}   # {'url', 'headline', 'body'}
+        self._last_article: Dict[str, str] = {}
 
     # ─────────────────────── state helpers ────────────────────────── #
     def _load_last_url(self) -> str:
@@ -248,8 +230,15 @@ class SteelOrbisWatcher:
     # ───────────────────── scraping helpers ───────────────────────── #
     @staticmethod
     def _soup(url: str) -> BeautifulSoup:
-        resp = requests.get(url, headers=SteelOrbisWatcher.HEADERS, timeout=15)
-        resp.raise_for_status()
+        """
+        Download URL → BeautifulSoup.
+        Raises ConnectionError on any network / HTTP problem.
+        """
+        try:
+            resp = requests.get(url, headers=SteelOrbisWatcher.HEADERS, timeout=15)
+            resp.raise_for_status()
+        except requests.RequestException as exc:
+            raise ConnectionError(f"request failed: {exc}") from exc
         return BeautifulSoup(resp.text, "lxml")
 
     def _latest_link(self) -> Tuple[Optional[str], Optional[str]]:
@@ -267,7 +256,6 @@ class SteelOrbisWatcher:
         body_tag     = soup.select_one("#contentDiv")
         headline     = headline_tag.get_text(strip=True) if headline_tag else ""
 
-        # unwrap hyperlinks, keep their text
         for a in body_tag.find_all("a"):
             a.unwrap()
 
@@ -277,10 +265,6 @@ class SteelOrbisWatcher:
 
     # ───────────────────── event callback ─────────────────────────── #
     def on_new_article(self, headline: str, body: str, url: str) -> None:
-        """
-        Override for custom side-effects.
-        Default: pretty-print the article.
-        """
         bar = "=" * 80
         print(f"\n{bar}\n{headline}\n{bar}\n{body}\n")
 
@@ -288,31 +272,40 @@ class SteelOrbisWatcher:
     def poll(self) -> Tuple[bool, str, str]:
         """
         One-shot check.
-        Returns (is_new, title, body)  as described at top.
+        → (is_new, title, body)
+        Never raises network errors; instead prints “SteelOrbis is down …”.
         """
-        url, _ = self._latest_link()
+        try:
+            url, _ = self._latest_link()
+        except Exception as e:
+            print(f"SteelOrbis is down ({e}).")
+            return False, "", ""
 
-        if url and url != self._last_url:
-            # new article detected
+        # No article found (HTML changed?)  → treat as no news
+        if not url:
+            print("No new news")
+            return False, "", ""
+
+        # Same article as last time
+        if url == self._last_url:
+            print("No new news")
+            return False, "", ""
+
+        # New article path
+        try:
             title, body = self._fetch_article(url)
+        except Exception as e:
+            print(f"SteelOrbis is down ({e}).")
+            return False, "", ""
 
-            # cache and persist
-            self._last_url     = url
-            self._last_article = {"url": url, "headline": title, "body": body}
-            self._save_last_url(url)
-
-            # user hook
-            self.on_new_article(title, body, url)
-            return True, title, body
-
-        # nothing new
-        print("No new news")
-        return False, "", ""
+        # persist + callback
+        self._last_url     = url
+        self._last_article = {"url": url, "headline": title, "body": body}
+        self._save_last_url(url)
+        self.on_new_article(title, body, url)
+        return True, title, body
 
     def get_last_article(self) -> Dict[str, str]:
-        """
-        Return a copy of the cached article dict or {} if none fetched yet.
-        """
         return self._last_article.copy()
 
 
