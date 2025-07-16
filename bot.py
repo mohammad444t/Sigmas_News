@@ -1,3 +1,4 @@
+from __future__ import annotations
 from typing import List, Dict, Any
 from together import Together
 import time
@@ -6,7 +7,6 @@ import json, os, random, threading
 from typing import Set
 from telegram import Update, ReplyKeyboardMarkup, ParseMode
 from telegram.ext import Updater, CommandHandler, CallbackContext
-from __future__ import annotations
 from pathlib import Path
 from typing import Tuple, Optional
 from urllib.parse import urljoin
